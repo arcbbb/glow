@@ -309,6 +309,16 @@ add_glow_test(NAME Caffe2ImporterTest
               COMMAND ${GLOW_BINARY_DIR}/tests/Caffe2ImporterTest --gtest_output=xml:Caffe2ImporterTest.xml
               WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
+add_executable(HIRSliceTest
+               HIRSliceTest.cpp SimpleSplit.cpp)
+target_link_libraries(HIRSliceTest
+                      PRIVATE
+                        Graph
+                        Importer
+                        ExecutionEngine
+                        gtest
+                        TestMain)
+
 add_executable(OnnxImporterTest
                OnnxImporterTest.cpp)
 target_link_libraries(OnnxImporterTest

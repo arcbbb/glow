@@ -99,6 +99,10 @@ Node *createConvPoolSlice(T *node, llvm::ArrayRef<size_t> oslice_idx, llvm::Arra
       // No slice
       input_slice_dim.push_back(input_dim[dim_idx]);
       start_offset.push_back(0);
+      if (dim_idx == 1 || dim_idx == 2) {
+        new_pads[dim_idx - 1] = origin_pads[dim_idx -1];
+        new_pads[dim_num + dim_idx - 1] = origin_pads[dim_num + dim_idx -1];
+      }
       continue;
     }
 
@@ -122,7 +126,8 @@ Node *createConvPoolSlice(T *node, llvm::ArrayRef<size_t> oslice_idx, llvm::Arra
     unsigned stride = strides[dim_idx - 1];
     unsigned pad_begin = origin_pads[dim_idx - 1];
 
-    unsigned input_idx = std::max(0, (int) (oslice * stride - pad_begin));
+    unsigned output_idx = oslice_idx[dim_idx];
+    unsigned input_idx = std::max(0, (int) (output_idx * stride - pad_begin));
 
     start_offset.push_back(input_idx);
 
@@ -135,7 +140,7 @@ Node *createConvPoolSlice(T *node, llvm::ArrayRef<size_t> oslice_idx, llvm::Arra
     unsigned pads = 0;
     // Calculate padding
     if (input_idx == 0) {
-      unsigned cur_pad = pad_begin - oslice_idx[dim_idx] * stride;
+      unsigned cur_pad = pad_begin - output_idx * stride;
       new_pads[dim_idx - 1] = cur_pad;
       pads += cur_pad;
     }
@@ -226,6 +231,28 @@ Node *createConvPoolSliceonDimH(T *node, unsigned oh_idx, unsigned oh_slice) {
   return node_new;
 }
 
+#if 1
+Node *createSlice(Node *node, llvm::ArrayRef<size_t> oslice_idx, llvm::ArrayRef<size_t> oslice_sz) {
+  switch (node->getKind()) {
+    case Kinded::Kind::ConvolutionNodeKind:
+      {
+        auto *n = llvm::cast<ConvolutionNode>(node);
+        return createConvPoolSliceonDimH(n, oslice_idx[1], oslice_sz[1]);
+      }
+      break;
+    case Kinded::Kind::MaxPoolNodeKind:
+      {
+        auto *n = llvm::cast<MaxPoolNode>(node);
+        return createConvPoolSliceonDimH(n, oslice_idx[1], oslice_sz[1]);
+      }
+      break;
+    default:
+      llvm::outs() << node->getKindName() << "\n";
+      llvm_unreachable("node is not support");
+  }
+  return nullptr;
+}
+#else
 Node *createSlice(Node *node, llvm::ArrayRef<size_t> oslice_idx, llvm::ArrayRef<size_t> oslice_sz) {
   switch (node->getKind()) {
     case Kinded::Kind::ConvolutionNodeKind:
@@ -246,6 +273,7 @@ Node *createSlice(Node *node, llvm::ArrayRef<size_t> oslice_idx, llvm::ArrayRef<
   }
   return nullptr;
 }
+#endif
 
 Node *createSliceonDimH(Node *node, unsigned oh_idx, unsigned oh_slice) {
   switch (node->getKind()) {
@@ -344,6 +372,26 @@ void sliceEqually(Node *node, unsigned oh, unsigned max_h_slice) {
   std::vector<NodeValue> concat_list;
 
 #if 0
+  std::vector<std::vector<NodeValue>> concat_multi;
+  while (check_last_offset) {
+    NodeValue nv = createSlice(node, dim_offset, max_slice);
+    concat_multi[[0].push_back(nv);
+    // update offset
+    bool carry = true;
+    for (dim_idx = 0; carry && dim_idx < dim_num; dim_idx++) {
+      dim_offset[dim_idx] += max_slice[dim_idx];
+      dim_sz[dim_idx] -= max_slice[dim_idx];
+      if (dim_sz[dim_idx] > max_slice[dim_idx]) {
+        dim_offset[dim_idx] = 0;
+        carry = true;
+        // Node * nv= createConcat(concat_multi[dim_idx]);
+        // concat_multi[dim_idx+1].push_back(nv);
+      } else {
+        carry = false;
+      }
+    }
+  }
+
   for (dim_idx = 0; dim_idx < dim_num; dim_idx++) {
     while (oslice > max_slice) {
       concat_list.push_back(createSliceonDimH(node, dim_offset, max_slice));
